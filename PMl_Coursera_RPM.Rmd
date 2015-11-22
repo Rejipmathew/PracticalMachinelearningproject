@@ -1,0 +1,99 @@
+---
+title: "Practical Machine Learning Prj_RPM"
+author: "Reji Mathew"
+date: "November 19, 2015"
+output:
+  html_document:
+    keep_md: yes
+    toc: yes
+---
+
+#Practical Machine Learning Coursera Project Assingment
+##Background information
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+##Data Analysis
+The training dataset consists of 160 variables and 19622 observations. Seven variables in training dataset contained information like the name of the user and the time of excercise measurment. Almost 100 variables are practically useless because they contain around missing information. From this explonatory analysis, we decided to omit these 107 variables and only work with the remaining 51. It is important to mention that the variable of interest is the classe variable which consists of 5 levels:
+
+A: activity correctly performed
+B: throwing the elbows to the front
+C: lifting the dumbbell only halfway
+D: lowering the dumbbell only halfway
+E: throwing the hips to the front
+```{r}
+dataset <- read.csv("pml-training.csv", na.strings = c("NA", "", " "))
+```
+#Remove variables with missing information
+```{r}
+omit.variables <- sapply(dataset, function(x) {sum(is.na(x)) > 0})
+dataset <- dataset[ , !omit.variables]
+```
+#Remove header columns
+```{r}
+library(dplyr)
+dataset <- select(dataset, -(X:num_window))
+```
+##Model building
+The dataset was splitted into 60% for traning set and 40% for validation from training data set.
+```{r}
+set.seed(112358)
+library(caret)
+inTrain <- createDataPartition(dataset$classe, p = 0.7, list = FALSE)
+train <- dataset[inTrain, ]
+validation <- dataset[-inTrain, ]
+```
+##Exploratory data analysis of variables
+Target variables are plotted for exploring the distribution pattern
+```{r}
+qplot(classe, data = train, color = classe)
+```
+
+##Random Forest Model
+
+Practical Machine learning model was build on random forest using 51 variables.
+```{r}
+library(randomForest)
+model1.RF <- randomForest(classe ~ ., 
+                         data = train,
+                         ntree = 23)
+```
+Cross Validation to determing the number of varibles to be used in model training
+```{r}
+result <- rfcv(trainx = train[ , -53], trainy = train[ , 53], ntree = 23)
+with(result, plot(n.var, 
+                  error.cv, 
+                  log = "x", 
+                  type = "o", 
+                  lwd = 2, 
+                  xlab = "Number of variables", 
+                  ylab = "CV Error"))
+```
+
+##Selecting Variables for model building and testing data
+```{r}
+varImpPlot(model1.RF, n.var = 17)
+```
+## Retrain Model in testing dataset
+```{r}
+variables <- varImp(model1.RF)
+top.names <- rownames(variables)[order(variables, decreasing = TRUE)][1:17]
+
+model1.RF.top <- randomForest(x = train[ , top.names],
+                             y = train$classe,
+                             ntree = 23)
+```
+##Model validation
+```{r}
+pred <- predict(model1.RF.top, validation)
+confusionMatrix(pred, validation$classe)
+```
+
+
+```{r, echo=FALSE, results='hide'}
+testingraw <- read.csv("pml-testing.csv",na.strings=c("", "NA", "NULL"))
+testing2<-testingraw[,-which(apply(testingraw,2,function(x)all(is.na(x))))]
+answers <- predict(model1.RF.top, testing2)
+answers
+```
+
+##Summary
+The model developed by using training data set had an accuracy of 98.9% with 95% CI ranging from 98.16 to 98.80%) and out of sample error of 1.10%.
